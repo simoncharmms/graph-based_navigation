@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Graph-Based Navigation Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e17;--panel:#111827;--card:#1a2332;--card-hover:#1f2b3d;
+  --border:#293548;--text:#e0e6f0;--text-dim:#8899aa;--text-muted:#556677;
+  --accent:#00d4ff;--accent-dim:#0088aa;--success:#00ff88;--warning:#ffaa00;
+  --danger:#ff4444;--gold:#ffd700;--silver:#c0c0c0;--bronze:#cd7f32;
+  --fuel:#ff8c00;--ev:#00bfff;--rest:#00e676;--food:#ff69b4;
+  --sidebar-w:280px;--right-w:340px;
+}
+html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+.app{display:grid;grid-template-columns:var(--sidebar-w) 1fr var(--right-w);height:100vh}
+
+/* ── Sidebar ── */
+.sidebar{background:var(--panel);border-right:1px solid var(--border);padding:20px;display:flex;flex-direction:column;gap:20px;overflow-y:auto}
+.sidebar::-webkit-scrollbar{width:4px}.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.app-title{font-size:18px;font-weight:700;letter-spacing:-0.3px}
+.app-subtitle{font-size:12px;color:var(--text-dim);margin-top:4px;line-height:1.4}
+.section-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);margin-bottom:8px}
+.scenario-btns{display:flex;flex-direction:column;gap:8px}
+.scenario-btn{
+  background:var(--card);border:1.5px solid var(--border);border-radius:10px;
+  padding:12px 14px;cursor:pointer;text-align:left;transition:all .2s;color:var(--text)
+}
+.scenario-btn:hover{border-color:var(--accent-dim);background:var(--card-hover)}
+.scenario-btn.active{border-color:var(--accent);background:rgba(0,212,255,.08);box-shadow:0 0 12px rgba(0,212,255,.12)}
+.scenario-btn .emoji{font-size:20px;margin-right:6px}
+.scenario-btn .label{font-weight:600;font-size:14px}
+.scenario-btn .meta{font-size:11px;color:var(--text-dim);margin-top:4px}
+.slider-group{display:flex;flex-direction:column;gap:14px}
+.slider-item label{display:flex;justify-content:space-between;font-size:12px;font-weight:500;margin-bottom:4px}
+.slider-item label span{color:var(--accent);font-weight:600;font-variant-numeric:tabular-nums}
+input[type=range]{
+  -webkit-appearance:none;width:100%;height:6px;border-radius:3px;
+  background:var(--border);outline:none;cursor:pointer
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--bg);box-shadow:0 0 6px rgba(0,212,255,.4)
+}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim)}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.legend-line{width:18px;height:0;flex-shrink:0}
+.github-link{margin-top:auto;text-align:center;padding-top:12px;border-top:1px solid var(--border)}
+.github-link a{color:var(--text-muted);font-size:11px;text-decoration:none;transition:color .2s}
+.github-link a:hover{color:var(--accent)}
+
+/* ── Center ── */
+.center{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.tab-bar{display:flex;gap:0;border-bottom:1px solid var(--border);background:var(--panel);flex-shrink:0}
+.tab{
+  padding:10px 24px;font-size:13px;font-weight:500;color:var(--text-dim);
+  background:none;border:none;border-bottom:2px solid transparent;
+  cursor:pointer;transition:all .2s
+}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.graph-pane{flex:1;position:relative;overflow:hidden;display:none}
+.graph-pane.active{display:block}
+.graph-pane svg{width:100%;height:100%;display:block}
+
+/* ── Right Panel ── */
+.right-panel{background:var(--panel);border-left:1px solid var(--border);padding:20px;overflow-y:auto;display:flex;flex-direction:column;gap:16px}
+.right-panel::-webkit-scrollbar{width:4px}.right-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.rec-card{
+  background:var(--card);border:1.5px solid var(--border);border-radius:10px;
+  padding:14px;transition:all .25s;position:relative;overflow:hidden
+}
+.rec-card:hover{border-color:var(--accent-dim);background:var(--card-hover)}
+.rec-card.top-pick{border-color:var(--gold);box-shadow:0 0 16px rgba(255,215,0,.12)}
+.rec-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.rank-badge{
+  width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex-shrink:0
+}
+.rank-1{background:rgba(255,215,0,.15);color:var(--gold);border:1.5px solid var(--gold)}
+.rank-2{background:rgba(192,192,192,.1);color:var(--silver);border:1.5px solid var(--silver)}
+.rank-3{background:rgba(205,127,50,.1);color:var(--bronze);border:1.5px solid var(--bronze)}
+.rec-name{font-size:14px;font-weight:600;flex:1}
+.score-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.score-bar-bg{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
+.score-bar{height:100%;border-radius:4px;transition:width .4s ease}
+.score-val{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;min-width:42px;text-align:right}
+.rec-meta{display:flex;gap:12px;font-size:11px;color:var(--text-dim);margin-bottom:6px;flex-wrap:wrap}
+.rec-meta span{display:flex;align-items:center;gap:3px}
+.rec-route{font-size:11px;color:var(--text-muted);margin-bottom:6px;word-break:break-word;line-height:1.5}
+.rec-route .arrow{color:var(--accent);margin:0 3px}
+.explanations{list-style:none;padding:0;margin:0}
+.explanations li{font-size:11px;color:var(--text-dim);padding:2px 0 2px 14px;position:relative;line-height:1.4}
+.explanations li::before{content:'›';position:absolute;left:0;color:var(--accent);font-weight:700}
+.radar-wrap{margin-top:8px}
+.radar-wrap .section-label{margin-bottom:12px}
+
+/* ── Graph Styles ── */
+.edge-line{stroke:var(--text-muted);stroke-opacity:.35;fill:none}
+.edge-line.highway{stroke-width:5}.edge-line.urban{stroke-width:3.5}
+.edge-line.service{stroke-width:2.5;stroke-dasharray:6 3}.edge-line.local{stroke-width:2;stroke-dasharray:3 3}
+.edge-label{font-size:10px;fill:var(--text-muted);text-anchor:middle;dominant-baseline:central;pointer-events:none}
+.edge-label-bg{fill:var(--bg);opacity:.75;rx:3;ry:3}
+.route-edge{stroke-opacity:.9;fill:none;stroke-linecap:round}
+.route-baseline{stroke:#3366aa;stroke-width:4;stroke-opacity:.45;stroke-dasharray:8 4}
+.route-highlight{stroke:var(--success);stroke-width:5;stroke-opacity:.85;filter:drop-shadow(0 0 4px rgba(0,255,136,.4))}
+.node-circle{cursor:pointer;transition:r .2s}
+.node-label{font-size:11px;fill:var(--text);text-anchor:middle;dominant-baseline:central;pointer-events:none;font-weight:500}
+.node-sublabel{font-size:9px;fill:var(--text-dim);text-anchor:middle;pointer-events:none}
+@keyframes pulse-glow{0%,100%{r:18;opacity:.25}50%{r:24;opacity:.5}}
+.pulse-ring{fill:var(--success);animation:pulse-glow 1.8s ease-in-out infinite}
+.moving-dot{fill:var(--success);filter:drop-shadow(0 0 6px rgba(0,255,136,.7))}
+
+/* KG */
+.kg-node{cursor:pointer}.kg-node circle{transition:r .2s,fill .2s}
+.kg-node.highlighted circle{stroke:var(--accent);stroke-width:2.5}
+.kg-link{stroke:var(--text-muted);stroke-opacity:.3;fill:none}
+.kg-link.highlighted{stroke:var(--accent);stroke-opacity:.8;stroke-width:2}
+.kg-link-label{font-size:9px;fill:var(--text-muted);text-anchor:middle;pointer-events:none}
+.kg-link-label.highlighted{fill:var(--accent)}
+.kg-node-label{font-size:10px;fill:var(--text);text-anchor:middle;pointer-events:none;font-weight:500}
+
+/* Tooltip */
+.tooltip{
+  position:fixed;background:rgba(17,24,39,.95);border:1px solid var(--border);
+  border-radius:8px;padding:8px 12px;font-size:11px;pointer-events:none;
+  z-index:100;max-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.4);
+  opacity:0;transition:opacity .15s
+}
+.tooltip.visible{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- ── Left Sidebar ── -->
+  <aside class="sidebar">
+    <div>
+      <div class="app-title">🗺️ Graph Navigation</div>
+      <div class="app-subtitle">Dual-graph engine combining road routing with POI knowledge for smart stop recommendations.</div>
+    </div>
+
+    <div>
+      <div class="section-label">Scenario</div>
+      <div class="scenario-btns">
+        <button class="scenario-btn active" data-scenario="fuel_stop">
+          <span class="emoji">⛽</span><span class="label">Fuel Stop</span>
+          <div class="meta">ICE vehicle · Find fuel with restroom</div>
+        </button>
+        <button class="scenario-btn" data-scenario="ev_charge">
+          <span class="emoji">⚡</span><span class="label">EV Charge</span>
+          <div class="meta">EV vehicle · Charging station with restroom</div>
+        </button>
+        <button class="scenario-btn" data-scenario="family_rest">
+          <span class="emoji">👨‍👩‍👧</span><span class="label">Family Rest</span>
+          <div class="meta">ICE vehicle · Rest stop with playground &amp; food</div>
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Preferences</div>
+      <div class="slider-group">
+        <div class="slider-item">
+          <label>Max Detour <span id="detour-val">10 min</span></label>
+          <input type="range" id="slider-detour" min="0" max="30" step="1" value="10">
+        </div>
+        <div class="slider-item">
+          <label>Weight: ETA <span id="eta-val">0.40</span></label>
+          <input type="range" id="slider-eta" min="0" max="1" step="0.05" value="0.40">
+        </div>
+        <div class="slider-item">
+          <label>Weight: POI Quality <span id="poi-val">0.35</span></label>
+          <input type="range" id="slider-poi" min="0" max="1" step="0.05" value="0.35">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Legend</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#22c55e"></div>Origin</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>Destination</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#6b7280"></div>Junction</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--fuel)"></div>Fuel POI</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--ev)"></div>EV POI</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--rest)"></div>Rest POI</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--food)"></div>Food POI</div>
+        <div class="legend-item"><div class="legend-line" style="border-top:3px solid #3366aa"></div>Baseline</div>
+        <div class="legend-item"><div class="legend-line" style="border-top:3px solid var(--success)"></div>Recommended</div>
+      </div>
+    </div>
+
+    <div class="github-link">
+      <a href="https://github.com/simoncharmms/graph-based_navigation" target="_blank">github.com/simoncharmms/graph-based_navigation</a>
+    </div>
+  </aside>
+
+  <!-- ── Center ── -->
+  <main class="center">
+    <div class="tab-bar">
+      <button class="tab active" data-tab="road">🛣️ Road Network</button>
+      <button class="tab" data-tab="knowledge">🧠 Knowledge Graph</button>
+    </div>
+    <div id="road-pane" class="graph-pane active"></div>
+    <div id="kg-pane" class="graph-pane"></div>
+  </main>
+
+  <!-- ── Right Panel ── -->
+  <aside class="right-panel">
+    <div class="section-label">Recommendations</div>
+    <div id="rec-cards"></div>
+    <div class="radar-wrap">
+      <div class="section-label">Score Comparison</div>
+      <div id="radar-chart"></div>
+    </div>
+  </aside>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ====================================================================
+//  DATA — faithfully mirrored from Python demo_data.py
+// ====================================================================
+const ROAD_EDGES = [
+  { source:'home', target:'arterial_w', travel_minutes:5, reliability:0.95, road_type:'urban' },
+  { source:'arterial_w', target:'junction', travel_minutes:6, reliability:0.95, road_type:'urban' },
+  { source:'junction', target:'downtown', travel_minutes:8, reliability:0.92, road_type:'urban' },
+  { source:'junction', target:'highway_e', travel_minutes:4, reliability:0.96, road_type:'highway' },
+  { source:'highway_e', target:'office', travel_minutes:7, reliability:0.97, road_type:'highway' },
+  { source:'downtown', target:'office', travel_minutes:6, reliability:0.88, road_type:'urban' },
+  { source:'junction', target:'fuel_exit', travel_minutes:3, reliability:0.93, road_type:'service' },
+  { source:'fuel_exit', target:'highway_e', travel_minutes:4, reliability:0.91, road_type:'service' },
+  { source:'junction', target:'charger_hub', travel_minutes:4, reliability:0.94, road_type:'service' },
+  { source:'charger_hub', target:'office', travel_minutes:8, reliability:0.95, road_type:'urban' },
+  { source:'arterial_w', target:'family_plaza', travel_minutes:4, reliability:0.90, road_type:'service' },
+  { source:'family_plaza', target:'junction', travel_minutes:5, reliability:0.90, road_type:'service' },
+  { source:'highway_e', target:'scenic_detour', travel_minutes:4, reliability:0.84, road_type:'local' },
+  { source:'scenic_detour', target:'office', travel_minutes:9, reliability:0.85, road_type:'local' },
+];
+
+const POIS = [
+  { poi_id:'poi_fuel_fast', name:'QuickFuel Express', category:'fuel', anchor_node:'fuel_exit',
+    rating:4.2, amenities:['restroom','coffee'], tags:['low_detour','highway_access'],
+    open_now:true, predicted_wait_minutes:2, vehicle_types:['ice','ev'] },
+  { poi_id:'poi_charge_plus', name:'ChargePlus Hub', category:'ev_charging', anchor_node:'charger_hub',
+    rating:4.7, amenities:['restroom','cafe','covered_parking'], tags:['fast_charge','reliable'],
+    open_now:true, predicted_wait_minutes:6, vehicle_types:['ev'] },
+  { poi_id:'poi_family_stop', name:'Family Plaza', category:'rest_stop', anchor_node:'family_plaza',
+    rating:4.6, amenities:['restroom','playground','food'], tags:['family_friendly','safe_access'],
+    open_now:true, predicted_wait_minutes:3, vehicle_types:['ice','ev'] },
+  { poi_id:'poi_downtown_cafe', name:'Downtown Cafe', category:'food', anchor_node:'downtown',
+    rating:4.8, amenities:['coffee','wifi'], tags:['urban','busy'],
+    open_now:true, predicted_wait_minutes:8, vehicle_types:['ice','ev'] },
+];
+
+const KNOWLEDGE_EDGES = [
+  { source:'poi_fuel_fast', relation:'offers_amenity', target:'restroom', weight:0.8 },
+  { source:'poi_fuel_fast', relation:'offers_amenity', target:'coffee', weight:0.7 },
+  { source:'poi_fuel_fast', relation:'preferred_for_intent', target:'fuel_stop', weight:1.0 },
+  { source:'poi_fuel_fast', relation:'accessible_from', target:'highway_corridor', weight:0.9 },
+  { source:'poi_charge_plus', relation:'offers_amenity', target:'restroom', weight:0.8 },
+  { source:'poi_charge_plus', relation:'offers_amenity', target:'cafe', weight:0.7 },
+  { source:'poi_charge_plus', relation:'compatible_with_vehicle_type', target:'ev', weight:1.0 },
+  { source:'poi_charge_plus', relation:'preferred_for_intent', target:'ev_charge', weight:1.0 },
+  { source:'poi_charge_plus', relation:'reliable_in_context', target:'peak_traffic', weight:0.8 },
+  { source:'poi_family_stop', relation:'offers_amenity', target:'restroom', weight:0.9 },
+  { source:'poi_family_stop', relation:'offers_amenity', target:'playground', weight:1.0 },
+  { source:'poi_family_stop', relation:'offers_amenity', target:'food', weight:0.8 },
+  { source:'poi_family_stop', relation:'preferred_for_intent', target:'family_rest', weight:1.0 },
+  { source:'poi_family_stop', relation:'safe_for_segment', target:'family', weight:0.9 },
+  { source:'poi_downtown_cafe', relation:'offers_amenity', target:'coffee', weight:0.9 },
+  { source:'poi_downtown_cafe', relation:'busy_during', target:'peak_traffic', weight:0.4 },
+];
+
+const SCENARIOS = {
+  fuel_stop: {
+    name:'fuel_stop', origin:'home', destination:'office',
+    preference: {
+      intent:'fuel_stop', vehicle_type:'ice', max_detour_minutes:10,
+      required_amenities:['restroom'], avoid_amenities:[], prefer_brands:[],
+      weight_eta:0.40, weight_poi_quality:0.35, weight_reliability:0.15, weight_context:0.10
+    }
+  },
+  ev_charge: {
+    name:'ev_charge', origin:'home', destination:'office',
+    preference: {
+      intent:'ev_charge', vehicle_type:'ev', max_detour_minutes:14,
+      required_amenities:['restroom'], avoid_amenities:[], prefer_brands:['ChargePlus Hub'],
+      weight_eta:0.30, weight_poi_quality:0.40, weight_reliability:0.15, weight_context:0.10
+    }
+  },
+  family_rest: {
+    name:'family_rest', origin:'home', destination:'office',
+    preference: {
+      intent:'family_rest', vehicle_type:'ice', max_detour_minutes:12,
+      required_amenities:['restroom','food','playground'], avoid_amenities:[], prefer_brands:[],
+      weight_eta:0.25, weight_poi_quality:0.45, weight_reliability:0.15, weight_context:0.10
+    }
+  },
+};
+
+const NODE_POS = {
+  home:{x:80,y:250}, arterial_w:{x:220,y:250}, family_plaza:{x:220,y:380},
+  junction:{x:380,y:250}, downtown:{x:380,y:380}, fuel_exit:{x:500,y:150},
+  charger_hub:{x:500,y:350}, highway_e:{x:620,y:150}, scenic_detour:{x:700,y:280},
+  office:{x:780,y:200},
+};
+const NODE_NAMES = {
+  home:'Home', arterial_w:'Arterial W', family_plaza:'Family Plaza',
+  junction:'Junction', downtown:'Downtown', fuel_exit:'Fuel Exit',
+  charger_hub:'Charger Hub', highway_e:'Highway E', scenic_detour:'Scenic Detour',
+  office:'Office',
+};
+
+const POI_ANCHORS = {};
+POIS.forEach(p => { POI_ANCHORS[p.anchor_node] = p; });
+
+const CATEGORY_COLORS = { fuel:'var(--fuel)', ev_charging:'var(--ev)', rest_stop:'var(--rest)', food:'var(--food)' };
+
+function nodeType(id) {
+  if (id === 'home') return 'origin';
+  if (id === 'office') return 'destination';
+  if (POI_ANCHORS[id]) return 'poi';
+  if (id === 'junction') return 'junction';
+  return 'intermediate';
+}
+
+// ====================================================================
+//  ENGINE — faithful mirror of Python engine.py
+// ====================================================================
+function buildAdjacency(edges) {
+  const g = {};
+  edges.forEach(e => { (g[e.source] = g[e.source] || []).push(e); });
+  return g;
+}
+const roadGraph = buildAdjacency(ROAD_EDGES);
+
+const kgBySource = {};
+KNOWLEDGE_EDGES.forEach(e => { (kgBySource[e.source] = kgBySource[e.source] || []).push(e); });
+
+function dijkstra(graph, origin, destination) {
+  const heap = [{ minutes:0, node:origin, path:[origin], reliability:1.0 }];
+  const best = { [origin]:0 };
+  while (heap.length) {
+    let mi = 0;
+    for (let i = 1; i < heap.length; i++) { if (heap[i].minutes < heap[mi].minutes) mi = i; }
+    const state = heap.splice(mi, 1)[0];
+    if (state.node === destination) {
+      return {
+        path: state.path,
+        travel_minutes: Math.round(state.minutes * 100) / 100,
+        reliability: Math.round(state.reliability * 1000) / 1000,
+      };
+    }
+    if (state.minutes > (best[state.node] ?? Infinity)) continue;
+    for (const edge of (graph[state.node] || [])) {
+      const nm = state.minutes + edge.travel_minutes;
+      if (nm >= (best[edge.target] ?? Infinity)) continue;
+      best[edge.target] = nm;
+      heap.push({ minutes:nm, node:edge.target, path:[...state.path, edge.target], reliability:state.reliability * edge.reliability });
+    }
+  }
+  throw new Error(`No route from ${origin} to ${destination}`);
+}
+
+function mergeRoutes(a, b) {
+  return {
+    path: [...a.path, ...b.path.slice(1)],
+    travel_minutes: Math.round((a.travel_minutes + b.travel_minutes) * 100) / 100,
+    reliability: Math.round(a.reliability * b.reliability * 1000) / 1000,
+  };
+}
+
+const INTENT_TO_CAT = { fuel_stop:'fuel', ev_charge:'ev_charging', family_rest:'rest_stop' };
+
+function scorePoi(poi, pref) {
+  let score = 0;
+  const expl = [];
+  if (poi.category === (INTENT_TO_CAT[pref.intent] || pref.intent)) {
+    score += 0.35;
+    expl.push(`Matches trip intent '${pref.intent}'.`);
+  }
+  const rels = kgBySource[poi.poi_id] || [];
+  const relMap = {};
+  rels.forEach(r => { relMap[r.relation + '::' + r.target] = r.weight; });
+
+  for (const am of pref.required_amenities) {
+    if (poi.amenities.includes(am) || relMap['offers_amenity::' + am] !== undefined) {
+      score += 0.12; expl.push(`Provides required amenity '${am}'.`);
+    } else {
+      score -= 0.20; expl.push(`Missing required amenity '${am}'.`);
+    }
+  }
+  for (const am of pref.avoid_amenities) {
+    if (poi.amenities.includes(am)) { score -= 0.15; expl.push(`Contains avoided amenity '${am}'.`); }
+  }
+  if (pref.vehicle_type && poi.vehicle_types.includes(pref.vehicle_type)) score += 0.08;
+  if (poi.open_now) { score += 0.05; expl.push('Currently open.'); }
+  else { score -= 0.50; expl.push('Currently closed.'); }
+  if (poi.predicted_wait_minutes <= 5) { score += 0.08; expl.push('Low predicted wait time.'); }
+  else if (poi.predicted_wait_minutes >= 10) { score -= 0.10; expl.push('High predicted wait time.'); }
+
+  score += Math.max(0, Math.min(poi.rating / 5.0, 1.0)) * 0.20;
+  expl.push(`Strong user rating of ${poi.rating.toFixed(1)}/5.0.`);
+
+  if (pref.prefer_brands.includes(poi.name)) { score += 0.10; expl.push('Matches a preferred brand.'); }
+
+  const scoringRels = new Set(['preferred_for_intent','compatible_with_vehicle_type','safe_for_segment','reliable_in_context']);
+  const matchTargets = new Set([pref.intent, pref.vehicle_type, 'family', 'peak_traffic']);
+  for (const r of rels) {
+    if (scoringRels.has(r.relation) && matchTargets.has(r.target)) {
+      score += 0.05 * r.weight;
+    }
+  }
+  return { score: Math.round(score * 1000) / 1000, explanations: expl };
+}
+
+function totalScore(travelMin, reliability, poiScore, pref) {
+  const eta = Math.max(0, 1 - travelMin / 40);
+  const rel = Math.min(Math.max(reliability, 0), 1);
+  const ctx = Math.max(0, poiScore);
+  const t = eta * pref.weight_eta + poiScore * pref.weight_poi_quality + rel * pref.weight_reliability + ctx * pref.weight_context;
+  return Math.round(t * 1000) / 1000;
+}
+
+function recommend(scenarioName, overrides = {}) {
+  const sc = JSON.parse(JSON.stringify(SCENARIOS[scenarioName]));
+  const pref = sc.preference;
+  if (overrides.max_detour_minutes !== undefined) pref.max_detour_minutes = overrides.max_detour_minutes;
+  if (overrides.weight_eta !== undefined) pref.weight_eta = overrides.weight_eta;
+  if (overrides.weight_poi_quality !== undefined) pref.weight_poi_quality = overrides.weight_poi_quality;
+
+  const baseline = dijkstra(roadGraph, sc.origin, sc.destination);
+  const candidates = [{
+    scenarioName: sc.name, baselineRoute: baseline, finalRoute: baseline,
+    poi: null, detourMinutes: 0, poiScore: 0,
+    totalScore: totalScore(baseline.travel_minutes, baseline.reliability, 0, pref),
+    explanations: ['Fastest baseline route without a POI stop.'],
+    etaScore: Math.max(0, 1 - baseline.travel_minutes / 40),
+  }];
+
+  for (const poi of POIS) {
+    if (!poi.vehicle_types.includes(pref.vehicle_type)) continue;
+    const outbound = dijkstra(roadGraph, sc.origin, poi.anchor_node);
+    const inbound = dijkstra(roadGraph, poi.anchor_node, sc.destination);
+    const route = mergeRoutes(outbound, inbound);
+    const detour = Math.round((route.travel_minutes - baseline.travel_minutes) * 100) / 100;
+    if (detour > pref.max_detour_minutes) continue;
+    const { score: ps, explanations: expl } = scorePoi(poi, pref);
+    const ts = totalScore(route.travel_minutes, route.reliability, ps, pref);
+    candidates.push({
+      scenarioName: sc.name, baselineRoute: baseline, finalRoute: route,
+      poi, detourMinutes: detour, poiScore: ps, totalScore: ts,
+      explanations: expl,
+      etaScore: Math.max(0, 1 - route.travel_minutes / 40),
+    });
+  }
+  candidates.sort((a, b) => b.totalScore - a.totalScore);
+  return candidates.slice(0, 3);
+}
+
+// ====================================================================
+//  STATE
+// ====================================================================
+let activeScenario = 'fuel_stop';
+let currentRecs = [];
+let selectedPoiId = null;
+
+// ====================================================================
+//  ROAD GRAPH VISUALIZATION
+// ====================================================================
+const roadPane = d3.select('#road-pane');
+const roadSvg = roadPane.append('svg').attr('viewBox', '0 0 900 530');
+const roadDefs = roadSvg.append('defs');
+
+// Arrowhead markers
+['default','baseline','highlight'].forEach(kind => {
+  const colors = { default:'#667788', baseline:'#3366aa', highlight:'#00ff88' };
+  roadDefs.append('marker').attr('id', `arrow-${kind}`)
+    .attr('viewBox','0 0 10 10').attr('refX',28).attr('refY',5)
+    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto-start-reverse')
+    .append('path').attr('d','M 0 0 L 10 5 L 0 10 z').attr('fill', colors[kind]);
+});
+// Larger refX for highlight to clear node shapes
+roadDefs.select('#arrow-highlight').attr('refX', 30);
+
+const roadG = roadSvg.append('g');
+const zoom = d3.zoom().scaleExtent([0.4, 4]).on('zoom', e => roadG.attr('transform', e.transform));
+roadSvg.call(zoom);
+
+// Edge group
+const edgeG = roadG.append('g');
+const routeG = roadG.append('g');   // route highlights
+const labelG = roadG.append('g');   // edge labels
+const nodeG = roadG.append('g');    // nodes
+const animG = roadG.append('g');    // animation layer
+
+// Draw edges
+ROAD_EDGES.forEach(e => {
+  const s = NODE_POS[e.source], t = NODE_POS[e.target];
+  edgeG.append('line')
+    .attr('class', `edge-line ${e.road_type}`)
+    .attr('x1', s.x).attr('y1', s.y).attr('x2', t.x).attr('y2', t.y)
+    .attr('marker-end', 'url(#arrow-default)')
+    .attr('data-source', e.source).attr('data-target', e.target);
+
+  // Label
+  const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2;
+  const dx = t.x - s.x, dy = t.y - s.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const nx = -dy / len, ny = dx / len;
+  // Offset perpendicular — choose direction that goes "up" (negative y)
+  const dir = ny < 0 ? 1 : ny > 0 ? -1 : (nx < 0 ? -1 : 1);
+  const off = 12;
+  const lx = mx + nx * off * dir, ly = my + ny * off * dir;
+  const txt = `${e.travel_minutes}m`;
+  // Background rect
+  const bg = labelG.append('rect').attr('class','edge-label-bg')
+    .attr('x', lx - 12).attr('y', ly - 7).attr('width', 24).attr('height', 14);
+  labelG.append('text').attr('class','edge-label').attr('x', lx).attr('y', ly).text(txt);
+});
+
+// Draw nodes
+const allNodes = Object.keys(NODE_POS);
+allNodes.forEach(id => {
+  const p = NODE_POS[id];
+  const type = nodeType(id);
+  const g = nodeG.append('g').attr('transform', `translate(${p.x},${p.y})`).attr('data-node', id);
+
+  if (type === 'poi') {
+    const poi = POI_ANCHORS[id];
+    const col = CATEGORY_COLORS[poi.category] || '#888';
+    // Pulse ring (hidden by default)
+    g.append('circle').attr('class','pulse-ring').attr('r', 18).style('display','none');
+    // Diamond
+    g.append('polygon').attr('points','0,-14 14,0 0,14 -14,0')
+      .attr('fill', col).attr('fill-opacity', 0.2).attr('stroke', col).attr('stroke-width', 2);
+    g.append('text').attr('class','node-label').attr('y', -20).text(NODE_NAMES[id]);
+    g.append('text').attr('class','node-sublabel').attr('y', 24).text(poi.name);
+  } else {
+    const fills = { origin:'#22c55e', destination:'#ef4444', junction:'#6b7280', intermediate:'#4b5563' };
+    const r = type === 'intermediate' ? 8 : 12;
+    g.append('circle').attr('class','node-circle').attr('r', r)
+      .attr('fill', fills[type]).attr('fill-opacity', 0.25)
+      .attr('stroke', fills[type]).attr('stroke-width', 2);
+    g.append('text').attr('class','node-label').attr('y', -r - 6).text(NODE_NAMES[id]);
+  }
+
+  // Click handler for POI anchors → highlight KG
+  if (type === 'poi') {
+    g.style('cursor','pointer').on('click', () => {
+      selectedPoiId = POI_ANCHORS[id].poi_id;
+      updateKGHighlight();
+    });
+  }
+});
+
+// Edge lookup for fast access
+const edgeLookup = {};
+ROAD_EDGES.forEach(e => { edgeLookup[e.source + '->' + e.target] = e; });
+
+function pathEdges(path) {
+  const edges = [];
+  for (let i = 0; i < path.length - 1; i++) edges.push({ source: path[i], target: path[i + 1] });
+  return edges;
+}
+
+function drawRoutePath(path, cssClass, markerKind) {
+  const edges = pathEdges(path);
+  edges.forEach(({ source, target }) => {
+    const s = NODE_POS[source], t = NODE_POS[target];
+    routeG.append('line')
+      .attr('class', `route-edge ${cssClass}`)
+      .attr('x1', s.x).attr('y1', s.y).attr('x2', t.x).attr('y2', t.y)
+      .attr('marker-end', `url(#arrow-${markerKind})`);
+  });
+}
+
+function animateDot(path) {
+  animG.selectAll('*').remove();
+  if (path.length < 2) return;
+  // Build SVG path string
+  let d = `M ${NODE_POS[path[0]].x} ${NODE_POS[path[0]].y}`;
+  for (let i = 1; i < path.length; i++) d += ` L ${NODE_POS[path[i]].x} ${NODE_POS[path[i]].y}`;
+  const pathEl = animG.append('path').attr('d', d).attr('fill','none').attr('stroke','none');
+  const totalLen = pathEl.node().getTotalLength();
+  const dot = animG.append('circle').attr('class','moving-dot').attr('r', 7);
+
+  function run() {
+    const p0 = pathEl.node().getPointAtLength(0);
+    dot.attr('cx', p0.x).attr('cy', p0.y).attr('opacity', 1)
+      .transition().duration(totalLen * 8).ease(d3.easeLinear)
+      .attrTween('cx', () => t => pathEl.node().getPointAtLength(t * totalLen).x)
+      .attrTween('cy', () => t => pathEl.node().getPointAtLength(t * totalLen).y)
+      .on('end', () => {
+        dot.transition().duration(400).attr('opacity', 0).on('end', () => {
+          setTimeout(run, 600);
+        });
+      });
+  }
+  run();
+}
+
+function updateRoadGraph(recs) {
+  routeG.selectAll('*').remove();
+  animG.selectAll('*').remove();
+  // Reset pulse rings
+  nodeG.selectAll('.pulse-ring').style('display','none');
+
+  if (!recs.length) return;
+  const baseline = recs[0].baselineRoute;
+
+  // Draw baseline route
+  drawRoutePath(baseline.path, 'route-baseline', 'baseline');
+
+  // Top non-baseline recommendation
+  const topPoi = recs.find(r => r.poi !== null);
+  if (topPoi) {
+    drawRoutePath(topPoi.finalRoute.path, 'route-highlight', 'highlight');
+    animateDot(topPoi.finalRoute.path);
+    // Pulse the POI anchor
+    const anchorNode = topPoi.poi.anchor_node;
+    nodeG.select(`g[data-node="${anchorNode}"] .pulse-ring`).style('display', null);
+  }
+}
+
+// ====================================================================
+//  KNOWLEDGE GRAPH VISUALIZATION
+// ====================================================================
+const kgPane = d3.select('#kg-pane');
+const kgSvg = kgPane.append('svg');
+const kgG = kgSvg.append('g');
+const kgZoom = d3.zoom().scaleExtent([0.3, 4]).on('zoom', e => kgG.attr('transform', e.transform));
+kgSvg.call(kgZoom);
+
+// Build KG nodes and links
+const kgNodeSet = new Set();
+const kgLinks = [];
+KNOWLEDGE_EDGES.forEach(e => {
+  kgNodeSet.add(e.source);
+  kgNodeSet.add(e.target);
+  kgLinks.push({ source: e.source, target: e.target, relation: e.relation, weight: e.weight });
+});
+
+const poiIds = new Set(POIS.map(p => p.poi_id));
+const kgNodes = Array.from(kgNodeSet).map(id => ({
+  id,
+  isPoi: poiIds.has(id),
+  label: poiIds.has(id) ? POIS.find(p => p.poi_id === id).name : id.replace(/_/g, ' '),
+}));
+
+const kgSim = d3.forceSimulation(kgNodes)
+  .force('link', d3.forceLink(kgLinks).id(d => d.id).distance(120))
+  .force('charge', d3.forceManyBody().strength(-200))
+  .force('x', d3.forceX(d => d.isPoi ? -180 : 180).strength(0.3))
+  .force('y', d3.forceY(0).strength(0.05))
+  .force('collision', d3.forceCollide(40));
+
+// Links
+const kgLinkG = kgG.append('g');
+const kgLinkEls = kgLinkG.selectAll('line').data(kgLinks).enter().append('line')
+  .attr('class','kg-link').attr('stroke-width', d => 1 + d.weight);
+
+// Link labels
+const kgLinkLabelG = kgG.append('g');
+const kgLinkLabels = kgLinkLabelG.selectAll('text').data(kgLinks).enter().append('text')
+  .attr('class','kg-link-label')
+  .text(d => `${d.relation.replace(/_/g,' ')} (${d.weight})`);
+
+// Nodes
+const kgNodeG = kgG.append('g');
+const kgNodeEls = kgNodeG.selectAll('g').data(kgNodes).enter().append('g').attr('class','kg-node');
+
+kgNodeEls.append('circle')
+  .attr('r', d => d.isPoi ? 16 : 12)
+  .attr('fill', d => {
+    if (!d.isPoi) return '#334155';
+    const poi = POIS.find(p => p.poi_id === d.id);
+    return CATEGORY_COLORS[poi.category] || '#666';
+  })
+  .attr('fill-opacity', 0.3)
+  .attr('stroke', d => {
+    if (!d.isPoi) return '#64748b';
+    const poi = POIS.find(p => p.poi_id === d.id);
+    return CATEGORY_COLORS[poi.category] || '#666';
+  })
+  .attr('stroke-width', 2);
+
+kgNodeEls.append('text').attr('class','kg-node-label').attr('dy', d => d.isPoi ? -22 : -18)
+  .text(d => d.label);
+
+kgNodeEls.on('click', (ev, d) => {
+  if (d.isPoi) { selectedPoiId = d.id; updateKGHighlight(); }
+});
+
+kgSim.on('tick', () => {
+  kgLinkEls.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  kgLinkLabels.attr('x', d => (d.source.x + d.target.x) / 2)
+    .attr('y', d => (d.source.y + d.target.y) / 2 - 8);
+  kgNodeEls.attr('transform', d => `translate(${d.x},${d.y})`);
+});
+
+function updateKGHighlight() {
+  kgNodeEls.classed('highlighted', d => {
+    if (!selectedPoiId) return false;
+    // Highlight the selected POI node and all its direct neighbors
+    if (d.id === selectedPoiId) return true;
+    return KNOWLEDGE_EDGES.some(e => e.source === selectedPoiId && e.target === d.id);
+  });
+  kgLinkEls.classed('highlighted', d => {
+    if (!selectedPoiId) return false;
+    return (typeof d.source === 'object' ? d.source.id : d.source) === selectedPoiId;
+  });
+  kgLinkLabels.classed('highlighted', d => {
+    if (!selectedPoiId) return false;
+    return (typeof d.source === 'object' ? d.source.id : d.source) === selectedPoiId;
+  });
+}
+
+// Center KG after simulation settles
+kgSim.on('end', () => {
+  const bounds = kgG.node().getBBox();
+  const vw = kgPane.node().clientWidth || 800;
+  const vh = kgPane.node().clientHeight || 500;
+  kgSvg.attr('viewBox', `${bounds.x - 40} ${bounds.y - 40} ${bounds.width + 80} ${bounds.height + 80}`);
+});
+
+// ====================================================================
+//  RECOMMENDATIONS UI
+// ====================================================================
+function scoreColor(score) {
+  if (score >= 0.6) return '#22c55e';
+  if (score >= 0.3) return '#eab308';
+  return '#ef4444';
+}
+
+function renderRecs(recs) {
+  const container = document.getElementById('rec-cards');
+  container.innerHTML = '';
+  recs.forEach((rec, idx) => {
+    const card = document.createElement('div');
+    card.className = 'rec-card' + (idx === 0 ? ' top-pick' : '');
+
+    const rankCls = idx < 3 ? `rank-${idx + 1}` : '';
+    const name = rec.poi ? rec.poi.name : 'Direct — no stop';
+    const pathStr = rec.finalRoute.path.map(n => `<span>${NODE_NAMES[n]}</span>`).join('<span class="arrow">→</span>');
+    const barW = Math.max(0, Math.min(rec.totalScore, 1)) * 100;
+    const barCol = scoreColor(rec.totalScore);
+
+    let meta = `<span>🕐 ${rec.finalRoute.travel_minutes} min</span>`;
+    if (rec.poi) meta += `<span>↩️ +${rec.detourMinutes} min detour</span>`;
+    meta += `<span>📊 ${(rec.finalRoute.reliability * 100).toFixed(0)}% reliable</span>`;
+
+    let explHtml = '';
+    rec.explanations.forEach(e => { explHtml += `<li>${e}</li>`; });
+
+    card.innerHTML = `
+      <div class="rec-header">
+        <div class="rank-badge ${rankCls}">${idx + 1}</div>
+        <div class="rec-name">${name}</div>
+      </div>
+      <div class="score-row">
+        <div class="score-bar-bg"><div class="score-bar" style="width:${barW}%;background:${barCol}"></div></div>
+        <div class="score-val" style="color:${barCol}">${rec.totalScore.toFixed(3)}</div>
+      </div>
+      <div class="rec-meta">${meta}</div>
+      <div class="rec-route">${pathStr}</div>
+      <ul class="explanations">${explHtml}</ul>
+    `;
+
+    // Hover highlighting on road graph
+    card.addEventListener('mouseenter', () => {
+      if (rec.poi) {
+        selectedPoiId = rec.poi.poi_id;
+        updateKGHighlight();
+      }
+    });
+
+    container.appendChild(card);
+  });
+}
+
+// ====================================================================
+//  RADAR / SPIDER CHART
+// ====================================================================
+function renderRadar(recs) {
+  const container = document.getElementById('radar-chart');
+  container.innerHTML = '';
+  if (!recs.length) return;
+
+  const size = 240, cx = size / 2, cy = size / 2, maxR = 90;
+  const axes = ['Speed', 'Quality', 'Reliability', 'Low Detour'];
+  const nAxes = axes.length;
+  const maxDetour = parseFloat(document.getElementById('slider-detour').value) || 30;
+
+  const svg = d3.select(container).append('svg')
+    .attr('width', size).attr('height', size + 30)
+    .append('g').attr('transform', `translate(${cx},${cy + 10})`);
+
+  // Grid rings
+  [0.2, 0.4, 0.6, 0.8, 1.0].forEach(level => {
+    const r = maxR * level;
+    const pts = [];
+    for (let i = 0; i < nAxes; i++) {
+      const angle = (2 * Math.PI * i / nAxes) - Math.PI / 2;
+      pts.push([r * Math.cos(angle), r * Math.sin(angle)]);
+    }
+    svg.append('polygon')
+      .attr('points', pts.map(p => p.join(',')).join(' '))
+      .attr('fill','none').attr('stroke','#293548').attr('stroke-width', 0.5);
+  });
+
+  // Axes
+  for (let i = 0; i < nAxes; i++) {
+    const angle = (2 * Math.PI * i / nAxes) - Math.PI / 2;
+    const ex = maxR * 1.15 * Math.cos(angle), ey = maxR * 1.15 * Math.sin(angle);
+    svg.append('line')
+      .attr('x1', 0).attr('y1', 0).attr('x2', maxR * Math.cos(angle)).attr('y2', maxR * Math.sin(angle))
+      .attr('stroke','#293548').attr('stroke-width', 0.5);
+    svg.append('text')
+      .attr('x', ex).attr('y', ey)
+      .attr('text-anchor','middle').attr('dominant-baseline','central')
+      .attr('fill','#8899aa').attr('font-size','9px').text(axes[i]);
+  }
+
+  // Data polygons
+  const radarColors = ['#ffd700','#00d4ff','#8899aa'];
+  recs.forEach((rec, idx) => {
+    const vals = [
+      rec.etaScore,
+      Math.max(0, Math.min(rec.poiScore, 1)),
+      rec.finalRoute.reliability,
+      rec.poi ? Math.max(0, 1 - rec.detourMinutes / Math.max(maxDetour, 1)) : 1,
+    ];
+    const pts = [];
+    for (let i = 0; i < nAxes; i++) {
+      const angle = (2 * Math.PI * i / nAxes) - Math.PI / 2;
+      const r = maxR * vals[i];
+      pts.push([r * Math.cos(angle), r * Math.sin(angle)]);
+    }
+    svg.append('polygon')
+      .attr('points', pts.map(p => p.join(',')).join(' '))
+      .attr('fill', radarColors[idx]).attr('fill-opacity', 0.12)
+      .attr('stroke', radarColors[idx]).attr('stroke-width', 1.5).attr('stroke-opacity', 0.7);
+  });
+
+  // Legend below
+  const legend = d3.select(container).append('div')
+    .style('display','flex').style('justify-content','center').style('gap','14px').style('margin-top','6px');
+  recs.forEach((rec, idx) => {
+    const item = legend.append('span').style('font-size','10px').style('color', radarColors[idx]).style('display','flex').style('align-items','center').style('gap','4px');
+    item.append('span').style('width','8px').style('height','8px').style('border-radius','50%')
+      .style('background', radarColors[idx]).style('display','inline-block');
+    item.append('span').text(rec.poi ? rec.poi.name : 'No stop');
+  });
+}
+
+// ====================================================================
+//  UI WIRING
+// ====================================================================
+function runEngine() {
+  const overrides = {
+    max_detour_minutes: parseFloat(document.getElementById('slider-detour').value),
+    weight_eta: parseFloat(document.getElementById('slider-eta').value),
+    weight_poi_quality: parseFloat(document.getElementById('slider-poi').value),
+  };
+  currentRecs = recommend(activeScenario, overrides);
+  renderRecs(currentRecs);
+  renderRadar(currentRecs);
+  updateRoadGraph(currentRecs);
+}
+
+function setScenario(name) {
+  activeScenario = name;
+  const pref = SCENARIOS[name].preference;
+  document.getElementById('slider-detour').value = pref.max_detour_minutes;
+  document.getElementById('slider-eta').value = pref.weight_eta;
+  document.getElementById('slider-poi').value = pref.weight_poi_quality;
+  updateSliderLabels();
+
+  document.querySelectorAll('.scenario-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.scenario === name);
+  });
+  runEngine();
+}
+
+function updateSliderLabels() {
+  document.getElementById('detour-val').textContent = document.getElementById('slider-detour').value + ' min';
+  document.getElementById('eta-val').textContent = parseFloat(document.getElementById('slider-eta').value).toFixed(2);
+  document.getElementById('poi-val').textContent = parseFloat(document.getElementById('slider-poi').value).toFixed(2);
+}
+
+// Scenario buttons
+document.querySelectorAll('.scenario-btn').forEach(btn => {
+  btn.addEventListener('click', () => setScenario(btn.dataset.scenario));
+});
+
+// Sliders
+['slider-detour','slider-eta','slider-poi'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    updateSliderLabels();
+    runEngine();
+  });
+});
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const target = tab.dataset.tab;
+    document.getElementById('road-pane').classList.toggle('active', target === 'road');
+    document.getElementById('kg-pane').classList.toggle('active', target === 'knowledge');
+    // Resize KG SVG if switching to it
+    if (target === 'knowledge') {
+      const bounds = kgG.node().getBBox();
+      if (bounds.width > 0) {
+        kgSvg.attr('viewBox', `${bounds.x - 40} ${bounds.y - 40} ${bounds.width + 80} ${bounds.height + 80}`);
+      }
+    }
+  });
+});
+
+// ====================================================================
+//  INIT
+// ====================================================================
+setScenario('fuel_stop');
+</script>
+</body>
+</html>
