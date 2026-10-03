@@ -185,3 +185,5 @@ node_modules/
 # Editor swap files
 *.swp
 *.swo
+.DS_Store
+.DS_Store
